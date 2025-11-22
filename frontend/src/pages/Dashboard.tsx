@@ -3,24 +3,123 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, Square, Save, Camera, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { apiService } from "@/services/api";
+import { CameraFeed } from "@/components/CameraFeed";
+
+interface AttendanceRecord {
+  student_id: string;
+  name: string;
+  entry_time: string;
+  exit_time?: string;
+  status: string;
+  suspicion_score: number;
+}
+
+interface SuspiciousActivity {
+  activity_id: string;
+  student_id: string;
+  name: string;
+  timestamp: string;
+  activity_type: string;
+  description: string;
+  resolved: boolean;
+}
 
 const Dashboard = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [suspiciousActivities, setSuspiciousActivities] = useState<SuspiciousActivity[]>([]);
+  const [stats, setStats] = useState({
+    present: 0,
+    suspicious: 0,
+    total: 0
+  });
 
-  const handleStartMonitoring = () => {
-    setIsMonitoring(true);
-    toast.success("Monitoring started");
+  // Load data on mount and refresh every 30 seconds
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadData = async () => {
+    try {
+      // Load today's attendance
+      const attendanceResponse = await apiService.getTodayAttendance();
+      const attendanceData = attendanceResponse.data || [];
+      setAttendance(attendanceData);
+
+      // Load suspicious activities
+      const suspiciousResponse = await apiService.getSuspiciousActivities();
+      const suspiciousData = suspiciousResponse.data || [];
+      setSuspiciousActivities(suspiciousData.filter((a: SuspiciousActivity) => !a.resolved).slice(0, 5));
+
+      // Calculate stats
+      const presentCount = attendanceData.filter((a: AttendanceRecord) => a.status === 'present').length;
+      const suspiciousCount = suspiciousData.filter((a: SuspiciousActivity) => !a.resolved).length;
+      
+      setStats({
+        present: presentCount,
+        suspicious: suspiciousCount,
+        total: attendanceData.length
+      });
+    } catch (error) {
+      console.error("Failed to load data:", error);
+    }
   };
 
-  const handleStopMonitoring = () => {
+  const handleStartMonitoring = async () => {
+    setIsMonitoring(true);
+    toast.success("Camera started - Monitoring active");
+
+    // Start backend monitoring (optional)
+    try {
+      await apiService.startCamera();
+    } catch (error) {
+      console.warn("Backend monitoring not available:", error);
+    }
+  };
+
+  const handleStopMonitoring = async () => {
     setIsMonitoring(false);
     toast.info("Monitoring stopped");
+
+    // Stop backend monitoring
+    try {
+      await apiService.stopCamera();
+    } catch (error) {
+      console.warn("Backend stop failed:", error);
+    }
   };
 
-  const handleSaveReport = () => {
-    toast.success("Attendance report saved");
+  const handleCameraError = (error: string) => {
+    toast.error(error);
+    setIsMonitoring(false);
+  };
+
+  const handleSaveReport = async () => {
+    try {
+      const attendance = await apiService.getTodayAttendance();
+      toast.success("Attendance report saved");
+      console.log("Attendance data:", attendance);
+    } catch (error) {
+      toast.error("Failed to save report");
+    }
+  };
+
+  const formatTimeAgo = (timestamp: string) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffMs = now.getTime() - time.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return time.toLocaleDateString();
   };
 
   return (
@@ -38,7 +137,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Present</p>
-                  <p className="text-3xl font-bold text-success">24</p>
+                  <p className="text-3xl font-bold text-success">{stats.present}</p>
                 </div>
                 <div className="w-12 h-12 bg-success-light rounded-full flex items-center justify-center">
                   <CheckCircle2 className="w-6 h-6 text-success" />
@@ -52,7 +151,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Suspicious</p>
-                  <p className="text-3xl font-bold text-warning">3</p>
+                  <p className="text-3xl font-bold text-warning">{stats.suspicious}</p>
                 </div>
                 <div className="w-12 h-12 bg-warning-light rounded-full flex items-center justify-center">
                   <AlertTriangle className="w-6 h-6 text-warning" />
@@ -66,7 +165,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total</p>
-                  <p className="text-3xl font-bold text-primary">30</p>
+                  <p className="text-3xl font-bold text-primary">{stats.total}</p>
                 </div>
                 <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
                   <Camera className="w-6 h-6 text-primary" />
@@ -93,22 +192,8 @@ const Dashboard = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="aspect-video bg-muted rounded-lg flex items-center justify-center relative overflow-hidden">
-                  {isMonitoring ? (
-                    <div className="w-full h-full bg-gradient-to-br from-muted to-muted-foreground/10 flex items-center justify-center">
-                      <div className="text-center">
-                        <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4 animate-pulse" />
-                        <p className="text-muted-foreground">Camera feed active</p>
-                        <p className="text-sm text-muted-foreground/70">Detecting faces in real-time</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center">
-                      <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">Camera feed stopped</p>
-                      <p className="text-sm text-muted-foreground/70">Click start to begin monitoring</p>
-                    </div>
-                  )}
+                <div className="aspect-video bg-black rounded-lg relative overflow-hidden">
+                  <CameraFeed isActive={isMonitoring} onError={handleCameraError} />
                 </div>
 
                 <div className="flex gap-2 mt-4">
@@ -143,62 +228,62 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                  {/* Suspicious Alert */}
-                  <div className="p-3 border border-warning/20 bg-warning-light rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-warning/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-warning" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">Challenge Pending</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          John Doe: Please turn your head left and right
-                        </p>
-                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          <span>30s remaining</span>
+                  {suspiciousActivities.length === 0 ? (
+                    <div className="text-center py-8">
+                      <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No suspicious activities</p>
+                      <p className="text-xs text-muted-foreground">All clear!</p>
+                    </div>
+                  ) : (
+                    suspiciousActivities.map((activity) => (
+                      <div 
+                        key={activity.activity_id} 
+                        className="p-3 border border-warning/20 bg-warning-light rounded-lg"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 bg-warning/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <AlertTriangle className="w-5 h-5 text-warning" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm capitalize">
+                              {activity.activity_type.replace(/_/g, ' ')}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {activity.name}: {activity.description}
+                            </p>
+                            <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                              <Clock className="w-3 h-3" />
+                              <span>{formatTimeAgo(activity.timestamp)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    ))
+                  )}
 
-                  {/* Verified Alert */}
-                  <div className="p-3 border border-success/20 bg-success-light rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-success/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-5 h-5 text-success" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">Verified</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Sarah Smith marked present
-                        </p>
-                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          <span>Just now</span>
+                  {/* Recent attendance entries */}
+                  {attendance.slice(0, 3).map((record) => (
+                    <div 
+                      key={record.student_id} 
+                      className="p-3 border border-success/20 bg-success-light rounded-lg"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-success/20 rounded-full flex items-center justify-center flex-shrink-0">
+                          <CheckCircle2 className="w-5 h-5 text-success" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">Verified</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {record.name} marked present
+                          </p>
+                          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            <span>{formatTimeAgo(record.entry_time)}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Warning Alert */}
-                  <div className="p-3 border border-danger/20 bg-danger-light rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-danger/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-danger" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">Suspicious Activity</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Unknown face detected at desk 12
-                        </p>
-                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          <span>2 min ago</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

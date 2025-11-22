@@ -218,6 +218,99 @@ class ApiService {
 
     return response.json();
   }
+
+  async getSuspiciousActivities(resolved: boolean = false) {
+    const response = await fetch(`${API_BASE_URL}/suspicious?resolved=${resolved}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch suspicious activities");
+    }
+
+    return response.json();
+  }
+
+  async resolveSuspiciousActivity(activityId: string) {
+    const response = await fetch(`${API_BASE_URL}/suspicious/resolve`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ activity_id: activityId }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to resolve activity");
+    }
+
+    return response.json();
+  }
+
+  // Camera Management
+  async startCamera() {
+    const response = await fetch(`${API_BASE_URL}/camera/start`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to start camera");
+    }
+
+    return response.json();
+  }
+
+  async stopCamera() {
+    const response = await fetch(`${API_BASE_URL}/camera/stop`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to stop camera");
+    }
+
+    return response.json();
+  }
+
+  async getCameraStatus() {
+    const response = await fetch(`${API_BASE_URL}/camera/status`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to get camera status");
+    }
+
+    return response.json();
+  }
+
+  // WebSocket connection for camera feed
+  connectCameraWebSocket(onMessage: (data: any) => void, onError?: (error: any) => void) {
+    const token = localStorage.getItem("auth_token");
+    const wsUrl = `ws://localhost:8000/ws/camera?token=${token}`;
+    
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage(data);
+      } catch (error) {
+        console.error("Failed to parse WebSocket message:", error);
+      }
+    };
+    
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      if (onError) onError(error);
+    };
+    
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+    
+    return ws;
+  }
 }
 
 export const apiService = new ApiService();
