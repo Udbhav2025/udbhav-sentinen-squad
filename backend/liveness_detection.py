@@ -59,13 +59,16 @@ class LivenessDetector:
         laplacian = cv2.Laplacian(gray, cv2.CV_64F)
         variance = laplacian.var()
         
+        print(f"  Texture variance: {variance:.2f}")
+        
         # Real faces have higher texture variance
-        if variance < 50:
-            return False, 0.3  # Too smooth - likely printed photo
-        elif variance > 100:
+        # Made more strict to catch phone displays
+        if variance < 80:
+            return False, 0.2  # Too smooth - likely printed photo or screen
+        elif variance > 150:
             return True, 0.9  # Good texture - likely real
         else:
-            return True, 0.6  # Borderline
+            return False, 0.5  # Borderline - reject to be safe
     
     def check_color_diversity(self, face_img):
         """
@@ -115,13 +118,57 @@ class LivenessDetector:
         _, bright_spots = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY)
         bright_ratio = np.sum(bright_spots > 0) / bright_spots.size
         
+        # Also check for moderate bright spots (screen glow)
+        _, moderate_bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+        moderate_ratio = np.sum(moderate_bright > 0) / moderate_bright.size
+        
+        print(f"  Bright spots: {bright_ratio:.4f}, Moderate: {moderate_ratio:.4f}")
+        
         # Too many bright spots suggest screen reflection
-        if bright_ratio > 0.15:
-            return False, 0.3  # Likely screen reflection
-        elif bright_ratio < 0.05:
+        # Made more strict to catch phone screens
+        if bright_ratio > 0.08 or moderate_ratio > 0.25:
+            return False, 0.2  # Likely screen reflection or glow
+        elif bright_ratio < 0.03 and moderate_ratio < 0.15:
             return True, 0.9  # No suspicious reflections
         else:
-            return True, 0.7
+            return False, 0.5  # Borderline - reject to be safe
+    
+    def check_screen_pattern(self, face_img):
+        """
+        Detect screen pixel patterns
+        Phone/monitor screens have characteristic pixel grids
+        """
+        if face_img is None or face_img.size == 0:
+            return True, 0.5
+        
+        # Convert to grayscale
+        if len(face_img.shape) == 3:
+            gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = face_img
+        
+        # Apply FFT to detect regular patterns (screen pixels)
+        f = np.fft.fft2(gray)
+        fshift = np.fft.fftshift(f)
+        magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+        
+        # Check for high-frequency regular patterns
+        h, w = magnitude_spectrum.shape
+        center_h, center_w = h // 2, w // 2
+        
+        # Sample high-frequency regions
+        high_freq_region = magnitude_spectrum[center_h-10:center_h+10, center_w+w//4:center_w+w//3]
+        high_freq_energy = np.mean(high_freq_region)
+        
+        print(f"  High-freq energy: {high_freq_energy:.2f}")
+        
+        # Screens have more high-frequency energy due to pixel grid
+        if high_freq_energy > 15:
+            return False, 0.2  # Likely screen with pixel pattern
+        elif high_freq_energy < 10:
+            return True, 0.9  # No screen pattern
+        else:
+            return False, 0.5  # Borderline
     
     def check_depth_cues(self, face_img):
         """
@@ -145,12 +192,15 @@ class LivenessDetector:
         # Real faces have more varied edge strengths
         edge_variance = np.var(gradient_mag)
         
-        if edge_variance < 100:
-            return False, 0.4  # Too uniform - likely flat photo
-        elif edge_variance > 500:
+        print(f"  Edge variance: {edge_variance:.2f}")
+        
+        # Made more strict to catch flat displays
+        if edge_variance < 200:
+            return False, 0.3  # Too uniform - likely flat photo or screen
+        elif edge_variance > 600:
             return True, 0.9  # Good depth variation
         else:
-            return True, 0.6
+            return False, 0.5  # Borderline - reject to be safe
     
     def detect_liveness(self, face_img, movement_history=None):
         """
@@ -186,14 +236,24 @@ class LivenessDetector:
         checks['depth'] = {'is_live': is_live, 'score': score}
         scores.append(score)
         
+        # 6. Screen pattern check (NEW - specifically for phone displays)
+        is_live, score = self.check_screen_pattern(face_img)
+        checks['screen_pattern'] = {'is_live': is_live, 'score': score}
+        scores.append(score)
+        
         # Calculate overall confidence
         avg_score = np.mean(scores)
         
         # Determine if live based on multiple checks
-        # Need at least 3 checks to pass with good scores
-        passing_checks = sum(1 for check in checks.values() if check['is_live'] and check['score'] > 0.6)
+        # Made MUCH more strict - need at least 5 out of 6 checks to pass with high scores
+        passing_checks = sum(1 for check in checks.values() if check['is_live'] and check['score'] > 0.7)
+        high_score_checks = sum(1 for check in checks.values() if check['score'] > 0.8)
         
-        is_live = passing_checks >= 3 and avg_score > 0.6
+        # Very strict criteria to prevent phone display spoofing
+        # Need 5/6 checks passing AND at least 3 with high scores
+        is_live = passing_checks >= 5 and avg_score > 0.75 and high_score_checks >= 3
+        
+        print(f"  Liveness decision: passing={passing_checks}/6, high_score={high_score_checks}/6, avg={avg_score:.2f}, is_live={is_live}")
         
         return is_live, avg_score, checks
     
@@ -201,6 +261,10 @@ class LivenessDetector:
         """
         Determine likely spoofing method based on failed checks
         """
+        # Check for screen pattern first (most specific)
+        if 'screen_pattern' in checks and not checks['screen_pattern']['is_live']:
+            return "phone_screen_display"
+        
         if not checks['texture']['is_live'] and not checks['depth']['is_live']:
             return "printed_photo"
         
