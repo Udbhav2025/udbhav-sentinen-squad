@@ -812,19 +812,33 @@ def recognize_face(frame, bbox):
         
         # Process results
         if len(result) > 0 and len(result[0]) > 0:
+            # Show top 3 matches for debugging
+            print(f"\n=== Top Matches ===")
+            for i in range(min(3, len(result[0]))):
+                match = result[0].iloc[i]
+                match_path = match['identity']
+                match_distance = match.get('VGG-Face_cosine', 1.0)
+                match_student_id = os.path.basename(match_path).split('_')[0]
+                print(f"{i+1}. Student {match_student_id}: distance={match_distance:.4f}, confidence={((1-match_distance)*100):.1f}%")
+            print("==================\n")
+            
             # Get the best match (first row)
             best_match = result[0].iloc[0]
             matched_path = best_match['identity']
             distance = best_match.get('VGG-Face_cosine', 1.0)
             
-            print(f"Match found: {matched_path}, distance: {distance}")
+            print(f"Best match: {matched_path}, distance: {distance}")
             
             # Check if distance is within acceptable threshold
-            # Lower distance = better match. Typical threshold: 0.4-0.6
-            RECOGNITION_THRESHOLD = 0.6
+            # Lower distance = better match. Strict threshold to prevent false positives
+            # 0.3 = Very strict (90%+ confidence required)
+            # 0.4 = Strict (80%+ confidence)
+            # 0.5 = Moderate (70%+ confidence)
+            RECOGNITION_THRESHOLD = 0.3
             
             if distance > RECOGNITION_THRESHOLD:
                 print(f"Distance {distance} exceeds threshold {RECOGNITION_THRESHOLD}, no match")
+                print(f"Confidence would be: {(1-distance)*100:.1f}% - REJECTED (need {(1-RECOGNITION_THRESHOLD)*100:.1f}%+)")
                 return None, None
             
             # Extract student ID from filename
