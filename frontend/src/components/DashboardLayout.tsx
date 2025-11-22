@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { Camera, Users, AlertTriangle, BarChart3, Settings, LogOut, CalendarCheck, UserCog } from "lucide-react";
+import { Camera, Users, AlertTriangle, BarChart3, Settings, LogOut, CalendarCheck, UserCog, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -24,6 +24,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       return [
         { icon: Camera, label: "Live Monitor", path: "/dashboard" },
         { icon: Users, label: "Students", path: "/students" },
+        { icon: ClipboardList, label: "Attendance", path: "/attendance" },
         { icon: AlertTriangle, label: "Suspicious", path: "/suspicious" },
         { icon: BarChart3, label: "Analytics", path: "/analytics" },
         { icon: UserCog, label: "User Management", path: "/user-management" },
@@ -35,6 +36,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return [
       { icon: Camera, label: "Live Monitor", path: "/dashboard" },
       { icon: Users, label: "Students", path: "/students" },
+      { icon: ClipboardList, label: "Attendance", path: "/attendance" },
       { icon: AlertTriangle, label: "Suspicious", path: "/suspicious" },
       { icon: BarChart3, label: "Analytics", path: "/analytics" },
       { icon: Settings, label: "Settings", path: "/settings" },

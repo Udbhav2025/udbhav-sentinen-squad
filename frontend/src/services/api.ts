@@ -219,6 +219,59 @@ class ApiService {
     return response.json();
   }
 
+  async getAttendanceByDate(date: string) {
+    const response = await fetch(`${API_BASE_URL}/attendance/date/${date}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch attendance");
+    }
+
+    return response.json();
+  }
+
+  async getAttendanceByDateRange(startDate: string, endDate: string) {
+    const response = await fetch(`${API_BASE_URL}/attendance/range?start_date=${startDate}&end_date=${endDate}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch attendance");
+    }
+
+    return response.json();
+  }
+
+  async getStudentAttendance(studentId: string, limit: number = 30) {
+    const response = await fetch(`${API_BASE_URL}/attendance/student/${studentId}?limit=${limit}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch student attendance");
+    }
+
+    return response.json();
+  }
+
+  async getAttendanceStats(startDate?: string, endDate?: string) {
+    let url = `${API_BASE_URL}/stats`;
+    if (startDate && endDate) {
+      url += `?start_date=${startDate}&end_date=${endDate}`;
+    }
+    
+    const response = await fetch(url, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch stats");
+    }
+
+    return response.json();
+  }
+
   async getSuspiciousActivities(resolved: boolean = false) {
     const response = await fetch(`${API_BASE_URL}/suspicious?resolved=${resolved}`, {
       headers: this.getAuthHeaders(),

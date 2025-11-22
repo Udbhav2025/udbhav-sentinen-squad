@@ -1,14 +1,55 @@
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiService } from "@/services/api";
 
 const MyAttendance = () => {
   const { user } = useAuth();
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalClasses: 0,
+    attended: 0,
+    attendanceRate: 0,
+    avgDuration: "0h 0m",
+  });
 
-  // Mock attendance data for the student
-  const attendanceRecords = [
+  useEffect(() => {
+    loadMyAttendance();
+  }, []);
+
+  const loadMyAttendance = async () => {
+    try {
+      setLoading(true);
+      // Get current user's student attendance
+      const response = await apiService.getStudentAttendance(user?.studentId || '', 30);
+      const records = response.data || [];
+      
+      setAttendanceRecords(records);
+      
+      // Calculate stats
+      const attended = records.filter((r: any) => r.status === 'present').length;
+      const total = records.length;
+      const rate = total > 0 ? Math.round((attended / total) * 100) : 0;
+      
+      setStats({
+        totalClasses: total,
+        attended: attended,
+        attendanceRate: rate,
+        avgDuration: "2h 15m", // TODO: Calculate from actual data
+      });
+    } catch (error) {
+      console.error("Failed to load attendance:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mock attendance data for the student (fallback)
+  const mockAttendanceRecords = [
     {
       date: "2024-01-20",
       entry_time: "09:00 AM",
@@ -39,12 +80,7 @@ const MyAttendance = () => {
     },
   ];
 
-  const stats = {
-    totalClasses: 20,
-    attended: 18,
-    attendanceRate: 90,
-    avgDuration: "2h 25m",
-  };
+
 
   return (
     <DashboardLayout>
@@ -115,8 +151,13 @@ const MyAttendance = () => {
             <CardTitle>Attendance History</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {attendanceRecords.map((record, index) => (
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            ) : attendanceRecords.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No attendance records found</div>
+            ) : (
+              <div className="space-y-4">
+                {attendanceRecords.map((record, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
@@ -160,7 +201,8 @@ const MyAttendance = () => {
                   </Badge>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -12,6 +12,7 @@ import Suspicious from "./pages/Suspicious";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import MyAttendance from "./pages/MyAttendance";
+import Attendance from "./pages/Attendance";
 import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
@@ -58,6 +59,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin", "teacher"]}>
                   <Analytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/attendance"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher"]}>
+                  <Attendance />
                 </ProtectedRoute>
               }
             />
